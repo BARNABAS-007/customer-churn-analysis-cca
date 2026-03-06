@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
 
 # Load model and scaler
@@ -55,3 +56,4 @@ if st.button("Predict Churn"):
 
     else:
         st.success("✅ Customer likely to STAY")
+
