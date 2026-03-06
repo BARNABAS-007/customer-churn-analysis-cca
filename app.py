@@ -7,7 +7,7 @@ import joblib
 model = joblib.load("best_churn_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
-st.title("Customer Churn Prediction System")
+st.title("Customer Churn Prediction & Retention Recommendation System")
 
 st.write("Enter customer details to predict churn risk")
 
@@ -34,6 +34,9 @@ input_data = pd.DataFrame({
     "InternetService":[internet_service]
 })
 
+# 🔹 Fix feature mismatch
+input_data = input_data.reindex(columns=scaler.feature_names_in_, fill_value=0)
+
 # Scale data
 input_scaled = scaler.transform(input_data)
 
@@ -43,17 +46,18 @@ if st.button("Predict Churn"):
     prediction = model.predict(input_scaled)
 
     if prediction[0] == 1:
+
         st.error("⚠️ Customer likely to CHURN")
 
         st.subheader("Recommended Retention Strategy")
 
         st.write("""
         • Offer loyalty discounts  
-        • Provide better customer support  
-        • Upgrade internet plan offers  
-        • Provide long-term contract benefits
+        • Improve customer support  
+        • Provide upgrade offers  
+        • Encourage long-term contracts  
         """)
 
     else:
-        st.success("✅ Customer likely to STAY")
 
+        st.success("✅ Customer likely to STAY")
