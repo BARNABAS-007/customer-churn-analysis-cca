@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-import sklearn
-from sklearn.preprocessing import StandardScaler
 import joblib
+
 # Load model and scaler
 model = joblib.load("best_churn_model.pkl")
 scaler = joblib.load("scaler.pkl")
@@ -55,6 +54,4 @@ if st.button("Predict Churn"):
         """)
 
     else:
-
         st.success("✅ Customer likely to STAY")
-
