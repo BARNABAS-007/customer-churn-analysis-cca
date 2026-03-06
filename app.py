@@ -2,273 +2,154 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
 import shap
-from sklearn.cluster import KMeans
 
-st.set_page_config(page_title="Customer Churn Intelligence Platform", layout="wide")
+# ------------------------------
+# PAGE CONFIG
+# ------------------------------
+st.set_page_config(page_title="Customer Churn AI Dashboard", layout="wide")
 
-# -------------------------------
-# LOAD MODEL
-# -------------------------------
+st.title("📊 Customer Churn Analysis & Retention AI System")
+
+# ------------------------------
+# LOAD MODEL FILES
+# ------------------------------
 
 model = joblib.load("best_churn_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
-st.title("Customer Churn Analysis & Retention Intelligence System")
+# ------------------------------
+# USER INPUT
+# ------------------------------
 
-# -------------------------------
-# DATASET UPLOAD
-# -------------------------------
+st.sidebar.header("Customer Details")
 
-st.sidebar.header("Upload Dataset")
+tenure = st.sidebar.slider("Tenure (months)",0,72,12)
+monthly_charges = st.sidebar.slider("Monthly Charges",0,150,70)
+total_charges = st.sidebar.slider("Total Charges",0,10000,2000)
+contract = st.sidebar.selectbox("Contract Type",[0,1,2])
+internet = st.sidebar.selectbox("Internet Service",[0,1,2])
+tech_support = st.sidebar.selectbox("Tech Support",[0,1])
 
-file = st.sidebar.file_uploader("Upload churn dataset", type=["csv"])
+# ------------------------------
+# CREATE INPUT DATAFRAME
+# ------------------------------
 
-if file is not None:
+input_dict = {
+    "tenure":[tenure],
+    "MonthlyCharges":[monthly_charges],
+    "TotalCharges":[total_charges],
+    "Contract":[contract],
+    "InternetService":[internet],
+    "TechSupport":[tech_support]
+}
 
-    df = pd.read_csv(file)
+X = pd.DataFrame(input_dict)
 
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head())
+# ------------------------------
+# SCALE INPUT
+# ------------------------------
 
-    # -------------------------------
-    # DATA CLEANING
-    # -------------------------------
-
-    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-    df = df.dropna()
-
-    df["Contract"] = df["Contract"].map({
-        "Month-to-month":0,
-        "One year":1,
-        "Two year":2
-    })
-
-    df["InternetService"] = df["InternetService"].map({
-        "DSL":0,
-        "Fiber optic":1,
-        "No":2
-    })
-
-    features = [
-        "tenure",
-        "MonthlyCharges",
-        "TotalCharges",
-        "Contract",
-        "InternetService"
-    ]
-
-    X = df[features]
-
-    # -------------------------------
-    # SCALE DATA
-    # -------------------------------
-
+try:
     X_scaled = scaler.transform(X)
+except:
+    st.error("⚠ Feature mismatch between scaler and input. Check training features.")
+    st.stop()
 
-    # -------------------------------
-    # PREDICT CHURN
-    # -------------------------------
+# ------------------------------
+# PREDICTION
+# ------------------------------
 
-    df["Prediction"] = model.predict(X_scaled)
-    df["ChurnProbability"] = model.predict_proba(X_scaled)[:,1]*100
+prediction = model.predict(X_scaled)[0]
+probability = model.predict_proba(X_scaled)[0][1]
 
-    # -------------------------------
-    # EXECUTIVE DASHBOARD
-    # -------------------------------
+st.subheader("🔮 Churn Prediction")
 
-    st.header("Executive Business Dashboard")
+if prediction == 1:
+    st.error(f"Customer likely to churn (Probability {probability:.2f})")
+else:
+    st.success(f"Customer likely to stay (Probability {probability:.2f})")
 
-    total_customers = len(df)
-    churn_customers = df[df["Prediction"] == 1].shape[0]
-    churn_rate = (churn_customers / total_customers) * 100
-    revenue_risk = df[df["Prediction"] == 1]["MonthlyCharges"].sum()
+# ------------------------------
+# FEATURE IMPORTANCE
+# ------------------------------
 
-    col1,col2,col3,col4 = st.columns(4)
+st.subheader("📊 Feature Importance")
 
-    col1.metric("Total Customers", total_customers)
-    col2.metric("Predicted Churn Customers", churn_customers)
-    col3.metric("Churn Rate (%)", f"{churn_rate:.2f}")
-    col4.metric("Revenue at Risk ($)", f"{revenue_risk:.2f}")
-
-    # -------------------------------
-    # INTERACTIVE FILTER
-    # -------------------------------
-
-    st.sidebar.header("Filters")
-
-    risk = st.sidebar.slider("Churn Risk Threshold",0,100,50)
-
-    high_risk = df[df["ChurnProbability"] > risk]
-
-    st.subheader("High Risk Customers")
-
-    st.dataframe(high_risk)
-
-    # -------------------------------
-    # CHURN DISTRIBUTION
-    # -------------------------------
-
-    col1,col2 = st.columns(2)
-
-    with col1:
-
-        st.subheader("Churn Probability Distribution")
-
-        fig,ax = plt.subplots()
-
-        sns.histplot(df["ChurnProbability"], bins=20, ax=ax)
-
-        st.pyplot(fig)
-
-    with col2:
-
-        st.subheader("Monthly Charges vs Churn Risk")
-
-        fig2,ax2 = plt.subplots()
-
-        sns.scatterplot(
-            x=df["MonthlyCharges"],
-            y=df["ChurnProbability"],
-            ax=ax2
-        )
-
-        st.pyplot(fig2)
-
-    # -------------------------------
-    # FEATURE IMPORTANCE
-    # -------------------------------
-
-    st.subheader("Feature Importance")
-
+try:
     importance = model.feature_importances_
 
-    importance_df = pd.DataFrame({
-        "Feature":features,
-        "Importance":importance
+    feat_df = pd.DataFrame({
+        "Feature":X.columns,
+        "Importance":importance[:len(X.columns)]
     })
 
-    fig3,ax3 = plt.subplots()
+    fig = px.bar(feat_df,
+                 x="Importance",
+                 y="Feature",
+                 orientation="h")
 
-    sns.barplot(
-        x="Importance",
-        y="Feature",
-        data=importance_df,
-        ax=ax3
-    )
+    st.plotly_chart(fig,use_container_width=True)
 
-    st.pyplot(fig3)
+except:
+    st.info("Feature importance not available for this model")
 
-    # -------------------------------
-    # SHAP AI EXPLANATION
-    # -------------------------------
+# ------------------------------
+# CUSTOMER SEGMENTATION
+# ------------------------------
 
-    st.subheader("AI Explanation (SHAP)")
+st.subheader("👥 Customer Segmentation")
 
-    explainer = shap.Explainer(model)
+if monthly_charges > 80:
+    segment = "High Value Customer"
+elif tenure < 12:
+    segment = "New Customer"
+else:
+    segment = "Regular Customer"
 
-    shap_values = explainer(X_scaled)
+st.info(f"Segment: {segment}")
 
-    fig4 = plt.figure()
+# ------------------------------
+# AI CHATBOT
+# ------------------------------
 
-    shap.summary_plot(shap_values, X, show=False)
+st.subheader("🤖 Churn Explanation Bot")
 
-    st.pyplot(fig4)
+user_question = st.text_input("Ask why customer might churn")
 
-    # -------------------------------
-    # CUSTOMER SEGMENTATION
-    # -------------------------------
+if user_question:
 
-    st.subheader("Customer Segmentation")
+    if prediction == 1:
+        response = """
+Customer may churn because:
 
-    kmeans = KMeans(n_clusters=3, random_state=42)
+• High monthly charges  
+• Short tenure  
+• Lack of technical support  
+• Contract type risk
+"""
+    else:
+        response = """
+Customer retention looks strong because:
 
-    df["Segment"] = kmeans.fit_predict(X_scaled)
+• Long tenure  
+• Stable contract  
+• Balanced charges
+"""
 
-    fig5,ax5 = plt.subplots()
+    st.write(response)
 
-    sns.scatterplot(
-        x=df["MonthlyCharges"],
-        y=df["tenure"],
-        hue=df["Segment"],
-        palette="viridis",
-        ax=ax5
-    )
+# ------------------------------
+# EXECUTIVE DASHBOARD
+# ------------------------------
 
-    st.pyplot(fig5)
+st.subheader("📊 Executive Business Dashboard")
 
-    # -------------------------------
-    # BUSINESS INSIGHTS
-    # -------------------------------
+col1,col2,col3 = st.columns(3)
 
-    st.subheader("Churn vs Stay")
+col1.metric("Churn Probability",round(probability,2))
+col2.metric("Customer Tenure",tenure)
+col3.metric("Monthly Revenue",monthly_charges)
 
-    fig6,ax6 = plt.subplots()
-
-    sns.countplot(x="Prediction", data=df, ax=ax6)
-
-    ax6.set_xticklabels(["Stay","Churn"])
-
-    st.pyplot(fig6)
-
-    # -------------------------------
-    # RETENTION STRATEGY
-    # -------------------------------
-
-    st.subheader("Retention Strategy")
-
-    st.write("""
-    🔴 High Risk Customers
-    • Offer loyalty discounts  
-    • Encourage yearly contracts  
-    • Improve customer support  
-
-    🟡 Medium Risk
-    • Offer bundled services  
-
-    🟢 Low Risk
-    • Maintain service quality
-    """)
-
-    # -------------------------------
-    # AI CHATBOT
-    # -------------------------------
-
-    st.header("AI Churn Assistant")
-
-    question = st.text_input("Ask something about churn")
-
-    if question:
-
-        if "why churn" in question.lower():
-
-            st.write("""
-Main churn reasons:
-
-• High monthly charges
-• Month-to-month contracts
-• Low tenure customers
-• Fiber internet dissatisfaction
-""")
-
-        elif "reduce churn" in question.lower():
-
-            st.write("""
-Recommended strategies:
-
-• Offer contract discounts
-• Improve customer support
-• Provide bundle offers
-• Upgrade internet services
-""")
-
-        elif "high risk" in question.lower():
-
-            st.dataframe(high_risk.head())
-
-        else:
-
-            st.write("Ask about churn causes, strategies, or high risk customers.")
-
+st.success("✅ AI Dashboard Running Successfully")
