@@ -3,163 +3,172 @@ import pandas as pd
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
 import shap
+from sklearn.cluster import KMeans
 
 # -----------------------------
-# Load Model & Scaler
+# Load Model and Scaler
 # -----------------------------
-
 model = joblib.load("best_churn_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
+st.set_page_config(page_title="Customer Churn AI System", layout="wide")
+
 st.title("📊 Customer Churn Analysis & Retention AI System")
 
+st.write("AI powered churn prediction and retention recommendation system")
+
 # -----------------------------
-# Upload Dataset
+# Get training features
 # -----------------------------
+features = scaler.feature_names_in_
 
-uploaded_file = st.file_uploader("Upload Customer Dataset", type=["csv"])
+st.sidebar.header("Customer Inputs")
 
-if uploaded_file:
+input_data = {}
 
-    df = pd.read_csv(uploaded_file)
+for feature in features:
+    input_data[feature] = st.sidebar.number_input(feature, value=0.0)
 
-    st.subheader("Dataset Preview")
-    st.dataframe(df.head())
+df = pd.DataFrame([input_data])
 
-    # -----------------------------
-    # Select Features
-    # -----------------------------
+# -----------------------------
+# Scale Data
+# -----------------------------
+X_scaled = scaler.transform(df)
 
-    features = scaler.feature_names_in_
+# -----------------------------
+# Predict
+# -----------------------------
+prediction = model.predict(X_scaled)
+prob = model.predict_proba(X_scaled)
 
-    X = df[features]
+churn_prob = prob[0][1] * 100
+stay_prob = prob[0][0] * 100
 
-    # Scale data
-    X_scaled = scaler.transform(X)
+# -----------------------------
+# Dashboard Layout
+# -----------------------------
+col1, col2, col3 = st.columns(3)
 
-    # -----------------------------
-    # Predict Churn
-    # -----------------------------
+col1.metric("Churn Probability", f"{churn_prob:.2f}%")
+col2.metric("Stay Probability", f"{stay_prob:.2f}%")
+col3.metric("Prediction", "Churn" if prediction[0] == 1 else "Stay")
 
-    df["Churn Prediction"] = model.predict(X_scaled)
+st.progress(int(churn_prob))
 
-    df["Churn Probability"] = model.predict_proba(X_scaled)[:,1]
+# -----------------------------
+# Risk Level
+# -----------------------------
+if churn_prob > 70:
+    st.error("🔴 High Risk Customer")
+elif churn_prob > 40:
+    st.warning("🟡 Medium Risk Customer")
+else:
+    st.success("🟢 Low Risk Customer")
 
-    st.subheader("Prediction Results")
-    st.dataframe(df.head())
+# -----------------------------
+# Retention Strategy
+# -----------------------------
+st.subheader("🎯 Recommended Retention Strategy")
 
-    # -----------------------------
-    # Churn Probability Dashboard
-    # -----------------------------
+if prediction[0] == 1:
 
-    st.subheader("📊 Churn Probability Distribution")
+    strategies = []
+
+    if "MonthlyCharges" in df.columns and df["MonthlyCharges"][0] > 80:
+        strategies.append("Offer loyalty discount")
+
+    if "tenure" in df.columns and df["tenure"][0] < 12:
+        strategies.append("Provide onboarding support")
+
+    strategies.append("Provide premium customer support")
+    strategies.append("Offer long-term contract benefits")
+
+    for s in strategies:
+        st.write("•", s)
+
+else:
+    st.write("Customer likely to stay. Maintain service quality.")
+
+# -----------------------------
+# Feature Importance
+# -----------------------------
+st.subheader("📈 Feature Importance")
+
+if hasattr(model, "feature_importances_"):
+
+    importance = model.feature_importances_
 
     fig, ax = plt.subplots()
-    ax.hist(df["Churn Probability"], bins=20)
+
+    ax.barh(features, importance)
+    ax.set_title("Feature Importance")
+
     st.pyplot(fig)
 
-    # -----------------------------
-    # Customer Segmentation
-    # -----------------------------
+# -----------------------------
+# SHAP Explainable AI
+# -----------------------------
+st.subheader("🤖 SHAP Explainable AI")
 
-    st.subheader("👥 Customer Segmentation")
+try:
 
-    kmeans = KMeans(n_clusters=3)
-    df["Segment"] = kmeans.fit_predict(X_scaled)
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X_scaled)
 
-    fig2, ax2 = plt.subplots()
-
-    ax2.scatter(
-        df[features[0]],
-        df[features[1]],
-        c=df["Segment"]
-    )
-
-    ax2.set_xlabel(features[0])
-    ax2.set_ylabel(features[1])
+    fig2 = plt.figure()
+    shap.plots.waterfall(shap_values[0], show=False)
 
     st.pyplot(fig2)
 
-    st.write("Segment 0 = Loyal Customers")
-    st.write("Segment 1 = At Risk")
-    st.write("Segment 2 = New Customers")
+except:
+    st.write("SHAP visualization not supported for this model")
 
-    # -----------------------------
-    # Feature Importance
-    # -----------------------------
+# -----------------------------
+# Customer Segmentation
+# -----------------------------
+st.subheader("👥 Customer Segmentation")
 
-    st.subheader("📈 Feature Importance")
+try:
 
-    if hasattr(model, "feature_importances_"):
+    kmeans = KMeans(n_clusters=3, random_state=42)
 
-        importance = model.feature_importances_
+    cluster = kmeans.fit_predict(X_scaled)
 
-        importance_df = pd.DataFrame({
-            "Feature":features,
-            "Importance":importance
-        }).sort_values("Importance", ascending=False)
+    st.write("Customer Segment:", int(cluster[0]))
 
-        fig3, ax3 = plt.subplots()
+except:
+    st.write("Segmentation unavailable")
 
-        ax3.barh(
-            importance_df["Feature"],
-            importance_df["Importance"]
-        )
+# -----------------------------
+# Retention Report Download
+# -----------------------------
+st.subheader("📄 Download Retention Report")
 
-        st.pyplot(fig3)
+report = f"""
+Customer Churn Analysis Report
 
-    # -----------------------------
-    # SHAP Explainable AI
-    # -----------------------------
+Churn Probability: {churn_prob:.2f}%
+Stay Probability: {stay_prob:.2f}%
 
-    st.subheader("🤖 AI Explanation (SHAP)")
+Prediction:
+{"Customer likely to churn" if prediction[0]==1 else "Customer likely to stay"}
 
-    explainer = shap.TreeExplainer(model)
+Recommended Strategy:
+Improve service quality
+Offer discounts
+Provide customer support
+"""
 
-    shap_values = explainer.shap_values(X_scaled)
+st.download_button(
+    label="Download Report",
+    data=report,
+    file_name="churn_report.txt"
+)
 
-    fig4 = plt.figure()
-
-    shap.summary_plot(
-        shap_values,
-        X,
-        show=False
-    )
-
-    st.pyplot(fig4)
-
-    # -----------------------------
-    # Retention Strategy Generator
-    # -----------------------------
-
-    st.subheader("💡 Retention Strategy Recommendations")
-
-    high_risk = df[df["Churn Probability"] > 0.7]
-
-    st.write("High Risk Customers:", len(high_risk))
-
-    st.write("""
-    Recommended Actions:
-
-    • Offer loyalty discounts  
-    • Provide long-term contract benefits  
-    • Improve customer support  
-    • Offer bundled service plans
-    """)
-
-    # -----------------------------
-    # Download Report
-    # -----------------------------
-
-    st.subheader("⬇ Download Report")
-
-    csv = df.to_csv(index=False)
-
-    st.download_button(
-        "Download Prediction Report",
-        csv,
-        "churn_report.csv",
-        "text/csv"
-    )
+# -----------------------------
+# Footer
+# -----------------------------
+st.markdown("---")
+st.write("AI Powered Customer Retention System")
