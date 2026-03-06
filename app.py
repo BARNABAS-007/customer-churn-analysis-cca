@@ -14,7 +14,7 @@ st.set_page_config(page_title="Customer Churn Intelligence Platform", layout="wi
 # -------------------------------
 
 model = joblib.load("best_churn_model.pkl")
-scaler = joblib.load("scaler (1).pkl")
+scaler = joblib.load("scaler.pkl")
 
 st.title("Customer Churn Analysis & Retention Intelligence System")
 
@@ -271,3 +271,4 @@ Recommended strategies:
         else:
 
             st.write("Ask about churn causes, strategies, or high risk customers.")
+
