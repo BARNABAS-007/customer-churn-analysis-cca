@@ -18,19 +18,33 @@ st.set_page_config(
 st.title("📊 Customer Churn Analysis and Retention Strategy Recommendation System")
 
 # ------------------------------------------------
-# LOAD MODEL FILES
+# LOAD MODEL FILES (SAFE LOADING)
 # ------------------------------------------------
 
-model = joblib.load("best_churn_model.pkl")
-scaler = joblib.load("scaler.pkl")
+try:
+    model = joblib.load("best_churn_model.pkl")
+    scaler = joblib.load("scaler.pkl")
+except Exception as e:
+    st.error("Model loading failed. Please check dependencies or missing files.")
+    st.write(e)
+    st.stop()
 
-features = scaler.feature_names_in_
+# get model features safely
+try:
+    features = scaler.feature_names_in_
+except:
+    st.error("Scaler does not contain feature names.")
+    st.stop()
 
 # ------------------------------------------------
-# LOAD DATASET (FROM GITHUB REPO)
+# LOAD DATASET
 # ------------------------------------------------
 
-df = pd.read_csv("customer_data.csv")
+try:
+    df = pd.read_csv("customer_data.csv")
+except:
+    st.error("Dataset file 'customer_data.csv' not found in repository.")
+    st.stop()
 
 st.subheader("Customer Dataset Preview")
 st.dataframe(df.head())
@@ -57,7 +71,12 @@ X = df[features]
 # SCALE DATA
 # ------------------------------------------------
 
-X_scaled = scaler.transform(X)
+try:
+    X_scaled = scaler.transform(X)
+except Exception as e:
+    st.error("Scaling failed. Feature mismatch with model.")
+    st.write(e)
+    st.stop()
 
 # ------------------------------------------------
 # PREDICTIONS
@@ -67,19 +86,19 @@ pred = model.predict(X_scaled)
 prob = model.predict_proba(X_scaled)
 
 df["Churn Prediction"] = pred
-df["Churn Probability"] = prob[:,1] * 100
+df["Churn Probability"] = prob[:, 1] * 100
 
 # ------------------------------------------------
 # CUSTOMER LIFETIME VALUE
 # ------------------------------------------------
 
 if "MonthlyCharges" in df.columns and "tenure" in df.columns:
-    df["CLV"] = df["MonthlyCharges"] * df["tenure"] * (1 - prob[:,1])
+    df["CLV"] = df["MonthlyCharges"] * df["tenure"] * (1 - prob[:, 1])
 else:
     df["CLV"] = 0
 
 # ------------------------------------------------
-# RETENTION STRATEGY FUNCTION
+# RETENTION STRATEGY
 # ------------------------------------------------
 
 def retention_strategy(row):
@@ -243,5 +262,3 @@ st.download_button(
     data=csv,
     file_name="churn_predictions.csv"
 )
-
-
